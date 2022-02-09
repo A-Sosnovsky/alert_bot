@@ -23,10 +23,8 @@ internal class TelegramBotPollingService : BackgroundService
         return Task.CompletedTask;
     }
 
-
-
-    private Task HandleUpdateAsync(ITelegramBotClient client, Update update, CancellationToken cancellationToken)
+    private async Task HandleUpdateAsync(ITelegramBotClient client, Update update, CancellationToken cancellationToken)
     {
-        return Task.CompletedTask;
+        await client.SendTextMessageAsync(update.Message.Chat.Id, $"ChatId = {update.Message.Chat.Id}", cancellationToken: cancellationToken);
     }
 }

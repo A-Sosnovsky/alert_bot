@@ -1,7 +1,9 @@
+using AlertBot.WebApi.Models;
 using Binance.Net.Interfaces;
 using Binance.Net.Objects;
 using Binance.Net.Objects.Futures.UserStream;
 using CryptoExchange.Net.Sockets;
+using Telegram.Bot;
 
 namespace AlertBot.WebApi.BackgroundServices;
 
@@ -10,15 +12,21 @@ internal class BinanceListenService : BackgroundService
     private readonly ILogger<BinanceListenService> _logger;
     private readonly IBinanceSocketClient _binanceSocketClient;
     private readonly IBinanceClient _binanceClient;
+    private readonly TelegramBotClient _telegramBotClient;
     private bool _subscribeRequired = true;
+    private readonly long? _chatId;
     
     public BinanceListenService(ILogger<BinanceListenService> logger,
         IBinanceSocketClient binanceSocketClient, 
-        IBinanceClient binanceClient)
+        IBinanceClient binanceClient,
+        TelegramBotClient telegramBotClient,
+        UserConfiguration configuration)
     {
         _logger = logger;
         _binanceSocketClient = binanceSocketClient;
         _binanceClient = binanceClient;
+        _telegramBotClient = telegramBotClient;
+        _chatId = configuration.ChatId;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -73,10 +81,30 @@ internal class BinanceListenService : BackgroundService
         switch (dataEvent.Data.Event)
         {
                 case "ORDER_TRADE_UPDATE":
+                    Task.Run(() => SendOrderChangeInfo(dataEvent.Data));
                 break;
             default:
                 break;
         }
+    }
+
+    private async Task SendOrderChangeInfo(BinanceFuturesStreamOrderUpdate dataEventData)
+    {
+        if (_chatId == null)
+        {
+            _logger.LogWarning("Can't send order update. ChatId is null");
+            return;
+        }
+
+        var message = $@"Symbol: {dataEventData.UpdateData.Symbol}. 
+Side: {dataEventData.UpdateData.Side.ToString()}
+OrderType: {dataEventData.UpdateData.OriginalType.ToString()}
+PositionSide: {dataEventData.UpdateData.PositionSide.ToString()}
+ExecutionType: {dataEventData.UpdateData.ExecutionType.ToString()}
+Price: {dataEventData.UpdateData.Price}
+RealizedProfit: {dataEventData.UpdateData.RealizedProfit}
+";
+        await _telegramBotClient.SendTextMessageAsync(_chatId.Value, message);
     }
 
     private void KeepAliveUserStream(string key, CancellationToken cancellationToken)
